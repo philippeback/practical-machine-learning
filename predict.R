@@ -1,0 +1,10 @@
+prediction<-predict(model, newdata=training1)
+mtx<-confusionMatrix(prediction, training1$classe)
+print(mtx)
+print(paste("Accuracy: ", round(mtx$overall['Accuracy']*100,2),'%'))
+
+testRaw <- read.csv('./data/pml-testing.csv', header=TRUE, ,na.strings=c('NA','#DIV/0!',' ',''))
+predictionTest<-predict(model, newdata=testRaw)
+mtx<-confusionMatrix(predictionTest, testRaw$classe)
+print(mtx)
+print(paste("Accuracy: ", round(mtx$overall['Accuracy']*100,2),'%'))

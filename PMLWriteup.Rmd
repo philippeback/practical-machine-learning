@@ -205,13 +205,19 @@ print(mtxTest2)
 print(paste("Accuracy: ", round(mtxTest2$overall['Accuracy']*100,2),'%'))
 ```
 
+## Out of sample error rate
+
+This is 100%-Accuracy
+
+```{r ooser}
+print(paste("Out of sample error rate: ", round((1.0-mtxTest2$overall['Accuracy'])*100,2),'%'))
+```
+
+
 # Applying the model to the testing set
 
 ```{r finaltest}
 predictionTest<-predict(model2, newdata=testRaw)
-mtxTestFinal<-confusionMatrix(predictionTest, testRaw$classe)
-print(mtxTestFinal)
-print(paste("Accuracy: ", round(mtxTestFinal$overall['Accuracy']*100,2),'%'))
 ```
 
 Let's write the files for the submission:
@@ -229,6 +235,26 @@ print("Answers:")
 print(predictionTest)
 pml_write_files(predictionTest)
 ```
+
+All of the predictions appear to be correct on the prediction submissions.
+
+# Conclusion
+
+This has been an interesting assignment.
+
+The fact that all tests are predicted correctly is probably due to the fact that the test entries do match the subjects that are part of the training set and that the experiment was well controlled.
+
+Now, due to time constraints, I've been using all predictors but varImp(model) shows that these are not all equal. Maybe it could be as good with only 10 covariates.
+
+Also, they may be correlations between the top variables. To be investigated further.
+
+For the record, I've been running this on a quad core i7 4770K 3.85 Ghz with 16GB or RAM.
+The OS is Ubuntu Linux.
+
+The 60% training took around 10-15 minutes to complete.
+
+I ran into some issues with the parallel computing and then used the doMC lib successfuly to use all cores easily as documented on the "parallel" webpage of caret documentation.
+
 
 
 
