@@ -1,0 +1,113 @@
+---
+title: "Practical Machine Learning Assignment Writeup"
+author: "Philippe Back"
+date: "June 21, 2015"
+output: html_document
+---
+
+#Background
+
+In an experiment conducted and documented at [Human Activity Recognition Public Datasets](http://groupware.les.inf.puc-rio.br/har), 6 male participants, aged 20-28, lifted weights under supervision.
+
+The point was to gather data on "how well" they lifted weights.
+
+The results (Class) and the associated parameters were recorded.
+
+Class | Meaning
+------| -------
+Class A | Specified execution of the exercise
+Class B | Throwing elbows to the front
+Class C | Lifting halfway
+Class D | Lowering halfway
+Class E | Throwing hips to front
+
+The data set is about performing 10 reps of unilateral dumbell biceps curls.
+
+# Exploring Data
+
+## Getting Data
+There are two datasets:
+
+- (https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv), which is the data to use in order to establish and validate the predictive model.
+- (https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv), which is the data to use for prediction based on the model. It also forms the data for which prediction has to be provided for an autograding part of the project.
+
+```{r}
+# url<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+# dataLocation <- download.file(url, "./data/pml-training.csv", method="curl")
+
+train_file <- './data/pml-training.csv'
+
+# url<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+# dataLocation <- download.file(url, "./data/pml-testing.csv", method="curl")
+test_file <- './data/pml-testing.csv'
+```
+
+```{r}
+
+trainRaw <- read.csv('./data/pml-training.csv', header=TRUE, ,na.strings=c('NA','#DIV/0!',' ',''))
+
+# summary(trainRaw)
+
+all_names <- names(trainRaw)
+print(all_names)
+
+```
+
+## Cleaning Data
+
+In order to predict, we have to keep predictors that make sense to use.
+
+Looking at the file, there are columns that aren't suited as predictors.
+
+Either a lot of NA's, or #DIV/0!, or empty or fields that aren't measurements. Those are in columns named after either:
+
+- timestamps (raw_timestamp_part1, raw_timestamp_part2,ctvd_timestamp)
+- timewindows 
+- statistical aggregates (avg, kurtosis, skewness, var)
+- the subject
+
+We need to remove the unnecessary columns from the data.
+
+We can keep the **classe** column as it is the outcome.
+
+The statistical aggregates are only valid for the rows where **new_window** is *yes*. It looks as if those are summaries of the rows where **new_window** is *no*.
+
+```{r}
+trainObservations <- trainRaw[trainRaw$new_window == 'no', ]
+```
+
+Remove all flavors of NAs by columns
+
+```{r}
+rowsCount<-nrow(trainObservations)
+
+sumsOfNAs <- apply(is.na(trainObservations), 2, sum) 
+isFullOfNAs <- sumsOfNAs == rowsCount
+hasData <- ! isFullOfNAs
+
+trainClean <- trainObservations[,hasData]
+```
+
+Remove the first 7 columns which are not pertinent for the model as explained above.
+
+```{r}
+print(names(trainClean)[1:7])
+trainCleaner <- trainClean[,-c(1:7 )]
+```
+
+One can run 
+```{r}
+# summary(trainCleaner)
+```
+to see that the data is now clean.
+
+# Building a prediction model
+
+We'll use the power of multiple cores.
+```{r}
+library(doParallel)
+cl<-makeCluster(detectCores())
+registerDoParallel(cl)
+
+stopCluster()
+```
