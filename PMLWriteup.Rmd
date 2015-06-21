@@ -31,7 +31,7 @@ There are two datasets:
 - (https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv), which is the data to use in order to establish and validate the predictive model.
 - (https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv), which is the data to use for prediction based on the model. It also forms the data for which prediction has to be provided for an autograding part of the project.
 
-```{r}
+```{r fetch}
 # url<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
 # dataLocation <- download.file(url, "./data/pml-training.csv", method="curl")
 
@@ -42,9 +42,13 @@ train_file <- './data/pml-training.csv'
 test_file <- './data/pml-testing.csv'
 ```
 
-```{r}
+```{r codenas}
+
+set.seed(22121969)
 
 trainRaw <- read.csv('./data/pml-training.csv', header=TRUE, ,na.strings=c('NA','#DIV/0!',' ',''))
+
+testRaw <- read.csv('./data/pml-testing.csv', header=TRUE, ,na.strings=c('NA','#DIV/0!',' ',''))
 
 # summary(trainRaw)
 
@@ -72,13 +76,13 @@ We can keep the **classe** column as it is the outcome.
 
 The statistical aggregates are only valid for the rows where **new_window** is *yes*. It looks as if those are summaries of the rows where **new_window** is *no*.
 
-```{r}
+```{r onlyobs}
 trainObservations <- trainRaw[trainRaw$new_window == 'no', ]
 ```
 
 Remove all flavors of NAs by columns
 
-```{r}
+```{r removenas}
 rowsCount<-nrow(trainObservations)
 
 sumsOfNAs <- apply(is.na(trainObservations), 2, sum) 
@@ -90,24 +94,142 @@ trainClean <- trainObservations[,hasData]
 
 Remove the first 7 columns which are not pertinent for the model as explained above.
 
-```{r}
+```{r removecols}
 print(names(trainClean)[1:7])
 trainCleaner <- trainClean[,-c(1:7 )]
+trainingSet <- trainCleaner
 ```
 
 One can run 
-```{r}
+```{r sumclean}
 # summary(trainCleaner)
 ```
 to see that the data is now clean.
 
 # Building a prediction model
 
-We'll use the power of multiple cores.
-```{r}
-library(doParallel)
-cl<-makeCluster(detectCores())
-registerDoParallel(cl)
+## Preparing the data
 
-stopCluster()
+We'll take 10% for training the model. That allows to check if the model is any good by looking at its accuracy. 
+
+```{r partition10pct}
+library(caret)
+
+trainIndex<-createDataPartition(trainingSet$classe, p=0.1, list=FALSE)
+
+trainingPartition <- trainingSet[trainIndex,]
+testingPartition <- trainingSet[-trainIndex,]
+
+
 ```
+
+## Training
+
+Let's train a model using random forests (this is deemed as one of the best algorithms, let's use that). With the 10% partition, random forests will not take forever to compute.
+
+Note: there should be a trainControl() tuning but after having read about it, I'll stick to the defaults as I think I need more time to grasp it all.
+The result is good enough anyway.
+```{r loadpar}
+#library(doParallel)
+library(doMC)
+library(foreach)
+registerDoMC(cores=8)
+```
+
+```{r train10pct parallel-do}
+model <- train(classe ~ ., 
+               trainingPartition, 
+               method="rf",
+               trControl = trainControl(),
+               tuneGrid = NULL, 
+               tuneLength = 3
+)
+```
+
+Let's see the importance of the variables:
+
+```{r plotimp}
+plot(varImp(model))
+```
+
+Let's now check if this model is any good.
+
+```{r confmtx}
+prediction <- predict(model, newdata=trainingPartition)
+mtx<-confusionMatrix(prediction, trainingPartition$classe)
+print(mtx)
+print(paste("Accuracy: ", round(mtx$overall['Accuracy']*100,2),'%'))
+```
+
+Accuracy 100% on the training set.
+
+On the testing part, we get:
+
+```{r confmtxtest}
+testPrediction <- predict(model, newdata=testingPartition)
+mtxTest<-confusionMatrix(testPrediction, testingPartition$classe)
+print(mtxTest)
+print(paste("Accuracy: ", round(mtxTest$overall['Accuracy']*100,2),'%'))
+```
+
+Looks like it is decent enough with `r paste("Accuracy: ", round(mtxTest$overall['Accuracy']*100,2),'%')` using 10% of the data for training.
+
+## Training on more data to get better accuracy
+
+Let's try with 60% of the data
+
+```{r part60pct}
+trainIndex<-createDataPartition(trainingSet$classe, p=0.60, list=FALSE)
+
+trainingPartition2<- trainingSet[trainIndex,]
+testingPartition2 <- trainingSet[-trainIndex,]
+```
+
+```{r train60pct parallel-do}
+model2 <- train(classe ~ ., 
+               trainingPartition2, 
+               method="rf",
+               trControl = trainControl(),
+               tuneGrid = NULL, 
+               tuneLength = 3
+)
+```
+
+
+On the testing part, we now get:
+
+```{r testmtx}
+testPrediction2 <- predict(model2, newdata=testingPartition2)
+mtxTest2<-confusionMatrix(testPrediction2, testingPartition2$classe)
+print(mtxTest2)
+print(paste("Accuracy: ", round(mtxTest2$overall['Accuracy']*100,2),'%'))
+```
+
+# Applying the model to the testing set
+
+```{r finaltest}
+predictionTest<-predict(model2, newdata=testRaw)
+mtxTestFinal<-confusionMatrix(predictionTest, testRaw$classe)
+print(mtxTestFinal)
+print(paste("Accuracy: ", round(mtxTestFinal$overall['Accuracy']*100,2),'%'))
+```
+
+Let's write the files for the submission:
+
+```{r writefiles}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+print("Answers:")
+print(predictionTest)
+pml_write_files(predictionTest)
+```
+
+
+
+
